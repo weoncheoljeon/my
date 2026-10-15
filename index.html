@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전문가용 중국 수입 원가 계산기</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for clean UI */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header Section -->
+    <header class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold flex items-center gap-3">
+                    <i class="fa-solid fa-calculator text-blue-300"></i> 중국 수입 원가 & 마진 계산기
+                </h1>
+                <p class="text-blue-200 text-sm mt-1">실시간 환율 연동 및 사업자별(간이/일반) 세금·수수료 완벽 반영 솔루션</p>
+            </div>
+            <div class="bg-blue-900/60 backdrop-blur border border-blue-600/40 px-4 py-2.5 rounded-xl text-sm flex items-center gap-3 shadow-inner">
+                <div>
+                    <span class="block text-xs text-blue-300">실시간 환율 (CNY/KRW)</span>
+                    <span id="exchangeRateDisplay" class="font-bold text-lg">조회 중...</span>
+                </div>
+                <button onclick="fetchExchangeRate()" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition text-xs flex items-center gap-1 shadow" title="환율 새로고침">
+                    <i class="fa-solid fa-rotate-right" id="refreshIcon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 flex-grow w-full">
+        
+        <!-- Grid Layout: Form vs Results -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Input Form Section (Left 7 cols) -->
+            <div class="lg:col-span-7 space-y-6">
+                
+                <!-- 1. 사업자 및 관세 설정 -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-id-card text-blue-600"></i> 1. 사업자 유형 및 통관 설정
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">사업자 구분</label>
+                            <select id="businessType" onchange="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="simplified">간이과세자 (세금계산서 미발행/간이환급)</option>
+                                <option value="general">일반과세자 (매입세액 공제 가능)</option>
+                                <option value="personal">개인통관 / 비사업자</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">적용 관세율 (%)</label>
+                            <div class="relative">
+                                <input type="number" id="tariffRate" value="8" step="0.1" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none pr-8">
+                                <span class="absolute right-3 top-2.5 text-slate-400 text-sm">%</span>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1">일반 공산품 기준 기본 8% (품목별 상이)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 상품 원가 정보 -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-box-open text-blue-600"></i> 2. 상품 정보 및 구매가
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">수량 (EA)</label>
+                            <input type="number" id="quantity" value="100" min="1" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">상품 단가 (위안화 CNY)</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-2.5 text-slate-400 font-semibold text-sm">¥</span>
+                                <input type="number" id="unitPriceCNY" value="15" step="0.1" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">현지 내륙 배송비 (총 위안화)</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-2.5 text-slate-400 font-semibold text-sm">¥</span>
+                                <input type="number" id="localShippingCNY" value="50" step="1" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">적용 환율 (CNY/KRW)</label>
+                            <input type="number" id="customExchangeRate" value="190" step="0.1" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 물류 및 배송비 정보 -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-truck-fast text-blue-600"></i> 3. 물류 및 배송 비용
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">총 중량 (kg)</label>
+                            <input type="number" id="totalWeightKg" value="50" step="0.5" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">kg당 국제 배송비 (원)</label>
+                            <div class="relative">
+                                <input type="number" id="shippingRatePerKg" value="4500" step="100" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none pr-8">
+                                <span class="absolute right-3 top-2.5 text-slate-400 text-sm">원</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">통관수수료 및 기타 부대비용 (원)</label>
+                            <div class="relative">
+                                <input type="number" id="customsFee" value="33000" step="1000" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none pr-8">
+                                <span class="absolute right-3 top-2.5 text-slate-400 text-sm">원</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">국내 고객 발송 택배비 (개당)</label>
+                            <div class="relative">
+                                <input type="number" id="domesticParcelFee" value="3000" step="100" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none pr-8">
+                                <span class="absolute right-3 top-2.5 text-slate-400 text-sm">원</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. 판매가 및 플랫폼 수수료 설정 -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-store text-blue-600"></i> 4. 판매 및 플랫폼 설정
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">예상 판매가 (개당 / 원)</label>
+                            <div class="relative">
+                                <input type="number" id="targetSellingPrice" value="15000" step="100" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none pr-8">
+                                <span class="absolute right-3 top-2.5 text-slate-400 text-sm">원</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">오픈마켓 판매 수수료율 (%)</label>
+                            <div class="relative">
+                                <input type="number" id="marketplaceFeeRate" value="11" step="0.5" oninput="calculate()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none pr-8">
+                                <span class="absolute right-3 top-2.5 text-slate-400 text-sm">%</span>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1">스마트스토어, 쿠팡 등 평균 수수료 (PG사 포함)</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Results Panel Section (Right 5 cols) -->
+            <div class="lg:col-span-5 space-y-6">
+                
+                <!-- Main Cost Summary Card -->
+                <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 sticky top-6">
+                    <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                        <h2 class="text-xl font-bold flex items-center gap-2 text-indigo-300">
+                            <i class="fa-solid fa-receipt"></i> 수입 원가 분석 결과
+                        </h2>
+                        <span id="badgeBusiness" class="bg-blue-600/40 text-blue-200 border border-blue-400/30 text-xs px-3 py-1 rounded-full font-medium">간이과세자</span>
+                    </div>
+
+                    <!-- Key Result Highlights -->
+                    <div class="space-y-4 mb-6">
+                        <div class="bg-white/5 rounded-2xl p-4 border border-white/10">
+                            <span class="text-xs text-slate-400 block mb-1">개당 최종 입고 원가 (총원가 ÷ 수량)</span>
+                            <div class="text-3xl font-extrabold text-white" id="resUnitCost">0원</div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-white/5 rounded-2xl p-3.5 border border-white/10">
+                                <span class="text-xs text-slate-400 block mb-0.5">총 수입 투입 비용</span>
+                                <div class="text-lg font-bold text-indigo-200" id="resTotalCost">0원</div>
+                            </div>
+                            <div class="bg-white/5 rounded-2xl p-3.5 border border-white/10">
+                                <span class="text-xs text-slate-400 block mb-0.5">예상 관·부가세 합계</span>
+                                <div class="text-lg font-bold text-indigo-200" id="resTotalTax">0원</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Breakdown list -->
+                    <div class="space-y-2.5 text-sm text-slate-300 border-t border-slate-800 pt-4 mb-6">
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">상품 순구매가 (원화 환산)</span>
+                            <span id="resProductKRW" class="font-semibold text-white">0원</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">현지 내륙 운송비</span>
+                            <span id="resLocalShippingKRW" class="font-semibold text-white">0원</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">국제 배송비</span>
+                            <span id="resInternationalShipping" class="font-semibold text-white">0원</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">관세 (예상)</span>
+                            <span id="resTariff" class="font-semibold text-white">0원</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">부가세 (예상 VAT)</span>
+                            <span id="resVAT" class="font-semibold text-white">0원</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">통관 및 관세사 수수료</span>
+                            <span id="resCustomsFee" class="font-semibold text-white">0원</span>
+                        </div>
+                    </div>
+
+                    <!-- Profitability & Margin Analysis -->
+                    <div class="bg-blue-600/20 border border-blue-500/30 rounded-2xl p-5 mb-6">
+                        <h3 class="text-sm font-bold text-blue-200 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-line"></i> 예상 수익성 및 마진 분석
+                        </h3>
+                        <div class="space-y-3 text-sm">
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-300">개당 오픈마켓 수수료</span>
+                                <span id="resPlatformFee" class="font-semibold text-rose-300">0원</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-300">개당 순수익 (택배비 포함)</span>
+                                <span id="resNetProfitPerItem" class="font-bold text-emerald-400 text-base">0원</span>
+                            </div>
+                            <div class="flex justify-between items-center border-t border-blue-500/20 pt-2">
+                                <span class="text-slate-200 font-medium">예상 마진율 (ROI)</span>
+                                <span id="resMarginRate" class="font-extrabold text-xl text-amber-300">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="resetForm()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl font-medium text-sm transition flex items-center justify-center gap-2 border border-slate-700">
+                            <i class="fa-solid fa-rotate-left"></i> 초기화
+                        </button>
+                        <button onclick="copySummary()" class="bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-medium text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30">
+                            <i class="fa-solid fa-copy"></i> 결과 복사하기
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 mt-12 py-6 text-center text-xs text-slate-500">
+        <p>본 계산 결과는 대략적인 예상 수입 원가 및 마진을 산출하기 위한 참고용이며, 정확한 세액 및 운송료는 관세사 및 포워딩 업체를 통해 확인하시기 바랍니다.</p>
+        <p class="mt-1">© 2026 전문가용 중국 수입 원가 계산기 Web App</p>
+    </footer>
+
+    <!-- Toast Notification Message Box -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 transform translate-y-20 opacity-0 z-50 flex items-center gap-3 border border-slate-700">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toastMessage" class="text-sm font-medium">클립보드에 복사되었습니다.</span>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // Format number helper
+        function formatKRW(val) {
+            return Math.round(val).toLocaleString('ko-KR') + '원';
+        }
+
+        function formatCNY(val) {
+            return '¥' + val.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+        }
+
+        // Fetch Real-time Exchange Rate (CNY/KRW) via Open API with Fallback
+        async function fetchExchangeRate() {
+            const icon = document.getElementById('refreshIcon');
+            icon.classList.add('animate-spin');
+            
+            try {
+                // Using free exchangerate-api or public currency endpoints
+                const response = await fetch('https://open.er-api.com/v6/latest/CNY');
+                const data = await response.json();
+                
+                if (data && data.rates && data.rates.KRW) {
+                    const rate = data.rates.KRW;
+                    document.getElementById('exchangeRateDisplay').innerText = rate.toFixed(2) + ' 원';
+                    document.getElementById('customExchangeRate').value = rate.toFixed(2);
+                    showToast('실시간 위안화(CNY) 환율이 적용되었습니다.');
+                } else {
+                    throw new Error('환율 정보를 불러오지 못했습니다.');
+                }
+            } catch (error) {
+                console.warn('API 연동 실패, 기본 환율 유지:', error);
+                showToast('실시간 환율 조회 실패. 기본 설정값(190원)을 사용합니다.', true);
+            } finally {
+                icon.classList.remove('animate-spin');
+                calculate();
+            }
+        }
+
+        // Main Calculation Engine
+        function calculate() {
+            // Get inputs
+            const businessType = document.getElementById('businessType').value;
+            const tariffRateInput = parseFloat(document.getElementById('tariffRate').value) || 0;
+            const quantity = parseInt(document.getElementById('quantity').value) || 1;
+            const unitPriceCNY = parseFloat(document.getElementById('unitPriceCNY').value) || 0;
+            const localShippingCNY = parseFloat(document.getElementById('localShippingCNY').value) || 0;
+            const exchangeRate = parseFloat(document.getElementById('customExchangeRate').value) || 190;
+            
+            const totalWeightKg = parseFloat(document.getElementById('totalWeightKg').value) || 0;
+            const shippingRatePerKg = parseFloat(document.getElementById('shippingRatePerKg').value) || 0;
+            const customsFee = parseFloat(document.getElementById('customsFee').value) || 0;
+            const domesticParcelFee = parseFloat(document.getElementById('domesticParcelFee').value) || 0;
+            
+            const targetSellingPrice = parseFloat(document.getElementById('targetSellingPrice').value) || 0;
+            const marketplaceFeeRate = parseFloat(document.getElementById('marketplaceFeeRate').value) || 0;
+
+            // Business Badge Text
+            const badgeMap = {
+                'simplified': '간이과세자',
+                'general': '일반과세자',
+                'personal': '개인통관 / 비사업자'
+            };
+            document.getElementById('badgeBusiness').innerText = badgeMap[businessType];
+
+            // 1. Product and Local Shipping in KRW
+            const productTotalCNY = (unitPriceCNY * quantity) + localShippingCNY;
+            const productKRW = (unitPriceCNY * quantity) * exchangeRate;
+            const localShippingKRW = localShippingCNY * exchangeRate;
+            const goodsPriceKRW = productKRW + localShippingKRW;
+
+            // 2. International Shipping
+            const internationalShipping = totalWeightKg * shippingRatePerKg;
+
+            // 3. Customs & VAT Calculation
+            // 과세가격 = 상품구매가(원화) + 현지운송비 + 국제배송비 (CIF 개념 근사치)
+            const taxableValue = goodsPriceKRW + internationalShipping;
+            
+            // 관세 = 과세가격 * 관세율
+            const tariff = taxableValue * (tariffRateInput / 100);
+
+            // 부가세(VAT) = (과세가격 + 관세) * 10%
+            // 일반과세자는 매입세액공제가 가능하므로 순수 원가산정시 부가세 제외 또는 별도 처리되나, 초기 자금 투입 기준으로 계산
+            let vat = (taxableValue + tariff) * 0.10;
+            
+            // 만약 일반과세자라면 부가세는 나중에 환급받으므로 순원가 계산에서 제외하는 전문가적 고려 반영 가능 (여기서는 총 투입과 순원가 구분)
+            const totalTax = tariff + vat;
+
+            // 4. Total Cost Calculation
+            // 총 투입 비용 = 상품구매가 + 현지배송비 + 국제배송비 + 통관수수료 + 관세 + 부가세
+            const totalCostBeforeVATDeduction = goodsPriceKRW + internationalShipping + customsFee + tariff + vat;
+            
+            // 일반과세자의 경우 부가세는 매입세액공제 대상이므로 실제 순원가에서는 제외될 수 있음
+            let netTotalCost = totalCostBeforeVATDeduction;
+            if (businessType === 'general') {
+                netTotalCost -= vat; // 부가세 공제 반영
+            }
+
+            // 개당 입고 원가 (택배비 미포함 순수 입고가)
+            const unitCost = netTotalCost / quantity;
+
+            // 5. Margin & Profit Analysis per item
+            const platformFeePerItem = targetSellingPrice * (marketplaceFeeRate / 100);
+            
+            // 개당 순이익 = 판매가 - (개당입고원가 + 오픈마켓수수료 + 개당국내택배비)
+            const netProfitPerItem = targetSellingPrice - (unitCost + platformFeePerItem + domesticParcelFee);
+            
+            // 마진율 (%) = (개당 순이익 / 판매가) * 100
+            let marginRate = 0;
+            if (targetSellingPrice > 0) {
+                marginRate = (netProfitPerItem / targetSellingPrice) * 100;
+            }
+
+            // 6. Update UI Elements
+            document.getElementById('resUnitCost').innerText = formatKRW(unitCost);
+            document.getElementById('resTotalCost').innerText = formatKRW(netTotalCost);
+            document.getElementById('resTotalTax').innerText = formatKRW(totalTax);
+
+            document.getElementById('resProductKRW').innerText = formatKRW(productKRW);
+            document.getElementById('resLocalShippingKRW').innerText = formatKRW(localShippingKRW);
+            document.getElementById('resInternationalShipping').innerText = formatKRW(internationalShipping);
+            document.getElementById('resTariff').innerText = formatKRW(tariff);
+            document.getElementById('resVAT').innerText = formatKRW(vat);
+            document.getElementById('resCustomsFee').innerText = formatKRW(customsFee);
+
+            document.getElementById('resPlatformFee').innerText = formatKRW(platformFeePerItem);
+            
+            const profitElem = document.getElementById('resNetProfitPerItem');
+            profitElem.innerText = formatKRW(netProfitPerItem);
+            profitElem.className = netProfitPerItem >= 0 ? "font-bold text-emerald-400 text-base" : "font-bold text-rose-400 text-base";
+
+            const marginElem = document.getElementById('resMarginRate');
+            marginElem.innerText = marginRate.toFixed(1) + '%';
+            marginElem.className = marginRate >= 20 ? "font-extrabold text-xl text-emerald-300" : (marginRate > 0 ? "font-extrabold text-xl text-amber-300" : "font-extrabold text-xl text-rose-400");
+        }
+
+        // Reset Form
+        function resetForm() {
+            document.getElementById('businessType').value = 'simplified';
+            document.getElementById('tariffRate').value = '8';
+            document.getElementById('quantity').value = '100';
+            document.getElementById('unitPriceCNY').value = '15';
+            document.getElementById('localShippingCNY').value = '50';
+            document.getElementById('totalWeightKg').value = '50';
+            document.getElementById('shippingRatePerKg').value = '4500';
+            document.getElementById('customsFee').value = '33000';
+            document.getElementById('domesticParcelFee').value = '3000';
+            document.getElementById('targetSellingPrice').value = '15000';
+            document.getElementById('marketplaceFeeRate').value = '11';
+            fetchExchangeRate();
+            showToast('입력값이 초기화되었습니다.');
+        }
+
+        // Copy Summary to Clipboard
+        function copySummary() {
+            const unitCost = document.getElementById('resUnitCost').innerText;
+            const totalCost = document.getElementById('resTotalCost').innerText;
+            const netProfit = document.getElementById('resNetProfitPerItem').innerText;
+            const marginRate = document.getElementById('resMarginRate').innerText;
+
+            const text = `[중국 수입 원가 계산 결과]\n- 개당 입고원가: ${unitCost}\n- 총 투입원가: ${totalCost}\n- 개당 예상순이익: ${netProfit}\n- 예상 마진율: ${marginRate}`;
+            
+            // Fallback for clipboard compatibility
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('계산 결과가 클립보드에 복사되었습니다.');
+            } catch (err) {
+                showToast('복사에 실패했습니다.', true);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // Toast Message Helper
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const msgElem = document.getElementById('toastMessage');
+            msgElem.innerText = message;
+            
+            if(isError) {
+                toast.classList.remove('bg-slate-900', 'border-slate-700');
+                toast.classList.add('bg-rose-900', 'border-rose-700');
+            } else {
+                toast.classList.remove('bg-rose-900', 'border-rose-700');
+                toast.classList.add('bg-slate-900', 'border-slate-700');
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // Initial load on window startup
+        window.onload = function() {
+            fetchExchangeRate();
+        };
+    </script>
+</body>
+</html>
